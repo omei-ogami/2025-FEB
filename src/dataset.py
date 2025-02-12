@@ -3,6 +3,7 @@ import shutil
 from PIL import Image
 import cv2
 import torch
+import numpy as np
 
 class DisasterDataset(torch.utils.data.Dataset):
     def __init__(self, root_dir, transform=None, target_transform=None):
@@ -39,7 +40,7 @@ class DisasterDataset(torch.utils.data.Dataset):
         
         pre_img = Image.open(pre_path).convert("RGB")
         post_img = Image.open(post_path).convert("RGB")
-        target_img = Image.open(target_path).convert("L")  # Grayscale mask
+        target_img = Image.open(target_path).convert("P")  
 
         # Apply transformations to images
         if self.transform:
@@ -49,5 +50,7 @@ class DisasterDataset(torch.utils.data.Dataset):
 
         if self.target_transform:
             target_img = self.target_transform(target_img)  # (1, H, W)
+
+        target_img[target_img > 3] = 0 # Ensure that all target values are in [0, 3]
 
         return input_tensor, target_img  # (6, H, W), (1, H, W)
