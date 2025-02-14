@@ -1,31 +1,28 @@
 from dataset import DisasterDataset
 from Unet import UNet
-from train import train, plot_loss
+from train import train
 from torchvision import transforms
 from torch.utils.data import random_split
 from torch.utils.data import DataLoader
+from focal_losss import FocalLoss
 import torch
-import matplotlib.pyplot as plt
 import numpy as np
 from plots import visualize_predictions
+import torchvision.transforms.v2 as T
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 def main():
     # Create dataset and transforms
-    transform = transforms.Compose([
-        transforms.Resize((256, 256)),  
-        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
-        transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
-        transforms.ToTensor(),  
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  
-    ])
+    transform = A.Compose([
+        A.Resize(512, 512),
+        A.HorizontalFlip(p=0.5),
+        A.VerticalFlip(p=0.5),
+        A.RandomRotate90(p=0.5),
+        A.RandomBrightnessContrast(p=0.5),
+    ], is_check_shapes=False)
 
-    target_transform = transforms.Compose([
-        # transforms.Resize((224, 224), interpolation=transforms.InterpolationMode.NEAREST),
-        transforms.Lambda(lambda img: torch.tensor(np.array(img), dtype=torch.long)) 
-    ])
-
-    dataset = DisasterDataset(root_dir="data/train", transform=transform, target_transform=target_transform)
+    dataset = DisasterDataset(root_dir="data/train", transform=transform)
 
     # split into training data (80) and validation data (20)k,
     train_size = int(0.8 * len(dataset))
@@ -40,24 +37,25 @@ def main():
     val_dataloader = DataLoader(val_dataset, batch_size=64, shuffle=False, pin_memory=True)
 
     # Experient Id
-    exp_id = 1
+    exp_id = 6
 
     # Hyperparameters
-    num_epochs = 70
-    learning_rate = 1e-3
+    num_epochs = 100
+    learning_rate = 5e-5
 
     # Define model, loss function, and optimizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using {device}")
-    class_weights = torch.tensor([0.1, 1.5, 2.0, 2.5]).to(device) 
     model = UNet(in_channels=6, out_channels=4)
-    criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    alpha = torch.tensor([0.1, 0.3, 0.3, 0.3]).to(device)
+    criterion = FocalLoss(gamma=2.0, alpha=alpha)
+    # criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate) 
+
 
     # Train the model
     model.to(device)
     performance = train(model, optimizer, criterion, train_dataloader, val_dataloader, num_epochs, device=device, exp_id=exp_id)
-    plot_loss(performance)
 
     # Save the model and results
     model_name = f"models/model_{exp_id}.pth"
@@ -65,7 +63,7 @@ def main():
     csv_name = f"runs/experiment_{exp_id}/performance.csv"
     performance.to_csv(csv_name, index=False)
 
-    visualize_predictions(model, val_dataloader, device="cuda")
+    visualize_predictions(model, val_dataloader, device="cuda", exp_id=exp_id)
 
 
 if __name__ == '__main__':

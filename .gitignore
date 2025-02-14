@@ -23,6 +23,7 @@ env/
 
 # Ignore large dataset files (custom rule for your project)
 data/
+runs/
 
 # Ignore model checkpoints (optional)
 checkpoints/
