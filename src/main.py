@@ -15,11 +15,11 @@ from albumentations.pytorch import ToTensorV2
 def main():
     # Create dataset and transforms
     transform = A.Compose([
-        A.Resize(512, 512),
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
         A.RandomRotate90(p=0.5),
         A.RandomBrightnessContrast(p=0.5),
+        A.Resize(512, 512),
     ], is_check_shapes=False)
 
     dataset = DisasterDataset(root_dir="data/train", transform=transform)
@@ -37,11 +37,11 @@ def main():
     val_dataloader = DataLoader(val_dataset, batch_size=64, shuffle=False, pin_memory=True)
 
     # Experient Id
-    exp_id = 6
+    exp_id = 11
 
     # Hyperparameters
     num_epochs = 100
-    learning_rate = 5e-5
+    learning_rate = 6e-5
 
     # Define model, loss function, and optimizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

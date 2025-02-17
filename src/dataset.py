@@ -62,7 +62,7 @@ class DisasterDataset(torch.utils.data.Dataset):
             pre_img = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(pre_img)
             post_img = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(post_img)
             
-        # self.visualize(pre_img, post_img, pre_target, post_target)
+        #self.visualize(pre_img, post_img, pre_target, post_target)
 
         target_img = post_target - pre_target
 

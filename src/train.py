@@ -13,7 +13,7 @@ def train(model, optimizer, criterion, train_loader, val_loader, num_epochs, dev
     writer = SummaryWriter(log_dir=folder)
 
     performance_data = []
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3, min_lr=1e-7)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5, min_lr=1e-7)
     train_loss, eval_loss = [], []
     best_iou = 0.0
     patience = 7
@@ -45,15 +45,6 @@ def train(model, optimizer, criterion, train_loader, val_loader, num_epochs, dev
         eval_loss.append(val_performance["Val Loss"])
         scheduler.step(val_performance["Mean IoU"])
         
-        if val_performance["Mean IoU"] > best_iou:
-            best_iou = val_performance["Mean IoU"]
-            patience = 7
-        else:
-            patience -= 1
-            if patience == 0:
-                print("Early stopping triggered at epoch", epoch + 1)
-                break
-        
         writer.add_scalar('Training Loss', avg_loss, epoch)
         writer.add_scalar('Validation Loss', val_performance["Val Loss"], epoch)
         writer.add_scalar('Mean IoU', val_performance["Mean IoU"], epoch)
@@ -71,6 +62,15 @@ def train(model, optimizer, criterion, train_loader, val_loader, num_epochs, dev
             "Per-class IoU": val_performance["IoU"],
             "Per-class Dice": val_performance["Dice Score"]
         })
+
+        if val_performance["Mean IoU"] > best_iou:
+            best_iou = val_performance["Mean IoU"]
+            patience = 10
+        else:
+            patience -= 1
+            if patience == 0:
+                print("Early stopping triggered at epoch", epoch + 1)
+                break
 
     writer.close()
     return pd.DataFrame(performance_data)
