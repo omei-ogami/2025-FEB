@@ -4,7 +4,7 @@ from train import train
 from torchvision import transforms
 from torch.utils.data import random_split
 from torch.utils.data import DataLoader
-from focal_losss import FocalLoss
+from loss import combined_loss
 import torch
 import numpy as np
 from plots import visualize_predictions
@@ -15,12 +15,15 @@ from albumentations.pytorch import ToTensorV2
 def main():
     # Create dataset and transforms
     transform = A.Compose([
+        A.RandomCrop(512, 512),  # 先随机裁剪，提高数据多样性
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
-        A.RandomRotate90(p=0.5),
+        A.RandomRotate90(p=0.5),  # 增强方向不变性的鲁棒性
+        A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.2, rotate_limit=30, p=0.5),  
         A.RandomBrightnessContrast(p=0.5),
-        A.Resize(512, 512),
-    ], is_check_shapes=False)
+        A.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=15, val_shift_limit=10, p=0.3),
+        A.GridDistortion(p=0.3),  # 代替 ElasticTransform
+    ])
 
     dataset = DisasterDataset(root_dir="data/train", transform=transform)
 
@@ -37,20 +40,18 @@ def main():
     val_dataloader = DataLoader(val_dataset, batch_size=64, shuffle=False, pin_memory=True)
 
     # Experient Id
-    exp_id = 11
+    exp_id = 29
 
     # Hyperparameters
-    num_epochs = 100
-    learning_rate = 6e-5
-
+    num_epochs = 200
+    learning_rate = 2e-4
     # Define model, loss function, and optimizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using {device}")
     model = UNet(in_channels=6, out_channels=4)
-    alpha = torch.tensor([0.1, 0.3, 0.3, 0.3]).to(device)
-    criterion = FocalLoss(gamma=2.0, alpha=alpha)
+    criterion = combined_loss
     # criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate) 
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4) 
 
 
     # Train the model
@@ -58,8 +59,6 @@ def main():
     performance = train(model, optimizer, criterion, train_dataloader, val_dataloader, num_epochs, device=device, exp_id=exp_id)
 
     # Save the model and results
-    model_name = f"models/model_{exp_id}.pth"
-    torch.save(model.state_dict(), model_name)
     csv_name = f"runs/experiment_{exp_id}/performance.csv"
     performance.to_csv(csv_name, index=False)
 

@@ -11,14 +11,16 @@ import torch.amp as amp
 def train(model, optimizer, criterion, train_loader, val_loader, num_epochs, device, exp_id):
     folder = f"runs/experiment_{exp_id}"
     writer = SummaryWriter(log_dir=folder)
+    model_name = f"models/model_{exp_id}.pth"
 
     performance_data = []
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5, min_lr=1e-7)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=8, min_lr=1e-7)
     train_loss, eval_loss = [], []
-    best_iou = 0.0
-    patience = 7
+    best_dice = 0.0
+    patience = 20
 
     scaler = amp.GradScaler()
+
 
     for epoch in range(num_epochs):
         model.train()
@@ -33,8 +35,10 @@ def train(model, optimizer, criterion, train_loader, val_loader, num_epochs, dev
                 targets = targets.squeeze(1)
                 loss = criterion(outputs, targets)
 
-
             scaler.scale(loss).backward()
+            # gradient clipping
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+
             scaler.step(optimizer)
             scaler.update()
             total_loss += loss.item()
@@ -43,14 +47,15 @@ def train(model, optimizer, criterion, train_loader, val_loader, num_epochs, dev
         train_loss.append(avg_loss)
         val_performance = evaluate(model, val_loader, criterion, device)
         eval_loss.append(val_performance["Val Loss"])
-        scheduler.step(val_performance["Mean IoU"])
+        scheduler.step(val_performance["Mean Dice Score"])
         
-        writer.add_scalar('Training Loss', avg_loss, epoch)
-        writer.add_scalar('Validation Loss', val_performance["Val Loss"], epoch)
+        writer.add_scalars("Loss", {"Train": avg_loss, "Validation": val_performance["Val Loss"]}, epoch)
         writer.add_scalar('Mean IoU', val_performance["Mean IoU"], epoch)
         writer.add_scalar('Dice Score', val_performance["Mean Dice Score"], epoch)
+        # learning rate
+        writer.add_scalar('Learning Rate', optimizer.param_groups[0]['lr'], epoch)
         
-        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {avg_loss:.4f}, Val Loss: {val_performance['Val Loss']:.4f}, Mean IoU: {val_performance['Mean IoU']:.4f}")
+        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {avg_loss:.4f}, Val Loss: {val_performance['Val Loss']:.4f}, Mean Dice: {val_performance['Mean Dice Score']:.4f}")
         
         performance_data.append({
             "Epoch": epoch + 1,
@@ -63,11 +68,14 @@ def train(model, optimizer, criterion, train_loader, val_loader, num_epochs, dev
             "Per-class Dice": val_performance["Dice Score"]
         })
 
-        if val_performance["Mean IoU"] > best_iou:
-            best_iou = val_performance["Mean IoU"]
-            patience = 10
+        if val_performance["Mean Dice Score"] > best_dice:
+            print(f'Best Dice: {best_dice:.4f} --> {val_performance["Mean Dice Score"]:.4f} at epoch {epoch+1}')
+            best_dice = val_performance["Mean Dice Score"]
+            patience = 20
+            torch.save(model.state_dict(), model_name)
         else:
             patience -= 1
+            print(f'Patience: {patience}/20')
             if patience == 0:
                 print("Early stopping triggered at epoch", epoch + 1)
                 break

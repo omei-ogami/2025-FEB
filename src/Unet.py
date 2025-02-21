@@ -12,6 +12,10 @@ class UNet(nn.Module):
         self.resnet = models.resnet34(weights=ResNet34_Weights.IMAGENET1K_V1)
         self.resnet.conv1 = nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
+        # freeze the ResNet weights
+        # for param in self.resnet.parameters():
+        #    param.requires_grad = False
+
         # Replace fully connected layers for segmentation
         self.resnet.fc = nn.Identity()
 
@@ -44,14 +48,15 @@ class UNet(nn.Module):
         )
 
         # Decoder
-        self.upconv1 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        self.upconv2 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        self.upconv3 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        self.upconv1 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2)
+        self.upconv2 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
+        self.upconv3 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
+
 
         # Decoder Convolutions (多層卷積)
-        self.dec_conv1 = DecoderBlock(512 + 256, 256) # 修改
-        self.dec_conv2 = DecoderBlock(256 + 128, 128) # 修改
-        self.dec_conv3 = DecoderBlock(128 + 64, 64)   # 修改
+        self.dec_conv1 = DecoderBlock(512, 256) # 修改
+        self.dec_conv2 = DecoderBlock(256, 128) # 修改
+        self.dec_conv3 = DecoderBlock(128, 64)   # 修改
 
         # Output layer
         self.outconv = nn.Conv2d(64, out_channels, kernel_size=1)
@@ -130,16 +135,18 @@ class ECA(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, dropout_rate=0.2):  # Add dropout_rate parameter
+    def __init__(self, in_channels, out_channels, dropout_rate=0.5):  # Add dropout_rate parameter
         super(DecoderBlock, self).__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(out_channels)
-        self.relu1 = nn.ReLU(inplace=True)
         self.dropout1 = nn.Dropout2d(dropout_rate)  # Dropout after ReLU
+        self.relu1 = nn.ReLU(inplace=True)
+
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(out_channels)
+        self.dropout2 = nn.Dropout2d(dropout_rate)
         self.relu2 = nn.ReLU(inplace=True)
-        self.dropout2 = nn.Dropout2d(dropout_rate)  # Dropout after ReLU
+        
 
     def forward(self, x):
         x = self.conv1(x)
