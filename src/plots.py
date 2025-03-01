@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-def visualize_predictions(model, dataloader, device, exp_id, batch_index=1, num_samples=3):
+def visualize_predictions(model, dataloader, device, exp_id, batch_index=2, num_samples=3):
     model.eval()
 
     # Convert to list (only once to avoid RAM issues in large datasets)

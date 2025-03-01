@@ -6,12 +6,15 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import torchvision.transforms as T
+import albumentations as A
 
 class DisasterDataset(torch.utils.data.Dataset):
     def __init__(self, root_dir, transform=None):
         self.root_dir = root_dir
         self.transform = transform
         self.image_pairs = []
+        self.mean = None
+        self.std = None
         
         pre_dir = os.path.join(root_dir, "images", "pre")
         post_dir = os.path.join(root_dir, "images", "post")
@@ -33,7 +36,7 @@ class DisasterDataset(torch.utils.data.Dataset):
             post_target_path = os.path.join(post_target_dir, post_target_filename)
 
             # Ensure that both post and target images exist
-            if os.path.exists(post_path) and os.path.exists(pre_target_path) and os.path.exists(post_target_path):
+            if os.path.exists(post_path) and os.path.exists(pre_target_path) and os.path.exists(post_target_path) and self.checkTarget(pre_target_path, post_target_path):
                 self.image_pairs.append((pre_path, post_path, pre_target_path, post_target_path))
 
     def __len__(self):
@@ -51,18 +54,21 @@ class DisasterDataset(torch.utils.data.Dataset):
             transformed_pre = self.transform(image=pre_img, mask=pre_target)
             pre_img = transformed_pre['image']
             pre_target = transformed_pre['mask']
+            replay = transformed_pre['replay']
 
-            transformed_post = self.transform(image=post_img, mask=post_target)
+            transformed_post = A.ReplayCompose.replay(replay, image=post_img, mask=post_target)
             post_img = transformed_post['image']
             post_target = transformed_post['mask']
 
-            # Normalize the images and convert to tensor
-            pre_img = T.ToTensor()(pre_img)
-            post_img = T.ToTensor()(post_img)
-            pre_img = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(pre_img)
-            post_img = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(post_img)
-            
-        #self.visualize(pre_img, post_img, pre_target, post_target)
+        # Normalize the images and convert to tensor
+        pre_img = T.ToTensor()(pre_img)
+        post_img = T.ToTensor()(post_img)
+
+        input_tensor = torch.cat([pre_img, post_img], dim=0)  # (6, H, W)
+
+        if self.mean != None and self.std != None:
+            input_tensor = T.Normalize(mean=self.mean, std=self.std)(input_tensor)
+            #self.visualize(input_tensor[:3, :, :], input_tensor[3:, :, :], pre_target, post_target)
 
         target_img = post_target - pre_target
 
@@ -75,7 +81,7 @@ class DisasterDataset(torch.utils.data.Dataset):
         # THEN convert to tensor
         target_img = torch.from_numpy(target_img).long()
 
-        input_tensor = torch.cat([pre_img, post_img], dim=0)  # (6, H, W)
+        
 
         return input_tensor, target_img  # (6, H, W), (H, W)
 
@@ -101,3 +107,20 @@ class DisasterDataset(torch.utils.data.Dataset):
 
         plt.tight_layout()
         plt.show()
+
+    def setStat(self, mean, std):
+        self.mean = mean
+        self.std = std
+
+    def checkTarget(self, pre_target_path, post_target_path):
+        # Ensure that pixels are within the range [0, 3], others to 0
+        pre_target = np.array(Image.open(pre_target_path).convert("P"))
+        post_target = np.array(Image.open(post_target_path).convert("P"))
+
+        pre_target = np.maximum(pre_target, 0)
+        pre_target[pre_target > 3] = 0
+
+        post_target = np.maximum(post_target, 0)
+        post_target[post_target > 3] = 0
+
+        return np.sum(pre_target) >= 1 and np.sum(post_target) >= 1

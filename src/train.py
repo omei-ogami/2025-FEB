@@ -14,10 +14,10 @@ def train(model, optimizer, criterion, train_loader, val_loader, num_epochs, dev
     model_name = f"models/model_{exp_id}.pth"
 
     performance_data = []
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=8, min_lr=1e-7)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5, verbose=True)
     train_loss, eval_loss = [], []
     best_dice = 0.0
-    patience = 20
+    patience = 25
 
     scaler = amp.GradScaler()
 
@@ -71,11 +71,11 @@ def train(model, optimizer, criterion, train_loader, val_loader, num_epochs, dev
         if val_performance["Mean Dice Score"] > best_dice:
             print(f'Best Dice: {best_dice:.4f} --> {val_performance["Mean Dice Score"]:.4f} at epoch {epoch+1}')
             best_dice = val_performance["Mean Dice Score"]
-            patience = 20
+            patience = 25
             torch.save(model.state_dict(), model_name)
         else:
             patience -= 1
-            print(f'Patience: {patience}/20')
+            print(f'Patience: {patience}/25 (Best: {best_dice:.4f})')
             if patience == 0:
                 print("Early stopping triggered at epoch", epoch + 1)
                 break
